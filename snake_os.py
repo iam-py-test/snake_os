@@ -7,7 +7,7 @@ import requests
 
 #main data
 
-version = 0.1.2
+version = 0.2
 hasloadedbefore = os.path.exists("config.snakeos.json")
 configdata = {}
 loginf = None
