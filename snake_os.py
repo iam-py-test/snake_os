@@ -3,10 +3,11 @@ import bcrypt
 import json
 import getpass
 import sys
+import requests
 
 #main data
 
-version = 0.1
+version = 0.1.2
 hasloadedbefore = os.path.exists("config.snakeos.json")
 configdata = {}
 loginf = None
@@ -27,6 +28,32 @@ def parsecmd(cmd):
 	if cmd == "shutdown":
 		print("Shutting down SnakeOS")
 		sys.exit()
+	if cmd == "updates check":
+		try:
+			cversion = float(requests.get("https://raw.githubusercontent.com/iam-py-test/snake_os/main/version.txt").text)
+			if cversion > version:
+				print("Update available: You are running {}, however, {} is available".format(version,cversion))
+			else:
+				print("You are update to data")
+		except Exception as err:
+			print("Failed to check for updates: {}".format(err))
+	if cmd == "updates version":
+		print("You are running SnakeOS version {}".format(version))
+	if cmd == "updates install":
+		try:
+			cversion = float(requests.get("https://raw.githubusercontent.com/iam-py-test/snake_os/main/version.txt").text)
+			print("This will erase any changes made to this file, but will leave your account intact")
+			conti = input("Install version {}? (y/n)".format(cversion))
+			if conti == "y":
+				newversion = requests.get("https://raw.githubusercontent.com/iam-py-test/snake_os/main/snake_os.py").text
+				cfile = open(__file__,"w")
+				cfile.write(newversion)
+				cfile.close()
+				print("Updated to {}. Reboot to initialize ".format(cversion))
+				
+		except Exception as err:
+			print("Failed to check for updates: {}".format(err))
+		
 
 
 def os_cmd():
