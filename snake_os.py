@@ -34,7 +34,7 @@ def parsecmd(cmd):
 			if cversion > version:
 				print("Update available: You are running {}, however, {} is available".format(version,cversion))
 			else:
-				print("You are update to data")
+				print("You are running the latest version of SnakeOS")
 		except Exception as err:
 			print("Failed to check for updates: {}".format(err))
 	if cmd == "updates version":
