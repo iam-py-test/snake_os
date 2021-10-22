@@ -1,16 +1,43 @@
 import os
-import bcrypt
 import json
 import getpass
 import sys
-import requests
+import time
+import socket
+import datetime
+
+try:
+	import requests
+	import bcrypt
+	import pytz
+except:
+	import subprocess
+	devnull = open(os.devnull, 'wb')
+	subprocess.Popen(sys.executable + " -m pip install requests", stdout=devnull, stderr=devnull)
+	subprocess.Popen(sys.executable + " -m pip install bcrypt", stdout=devnull, stderr=devnull)
+	subprocess.Popen(sys.executable + " -m pip install pytz", stdout=devnull, stderr=devnull)
+	time.sleep(5)
+	try:
+		import bcrypt
+		import requests
+		import pytz
+	except Exception as err:
+		print(err)
+		print("Required packages installed. Rebooting... ")
+		subprocess.run([sys.executable, " ".join(sys.argv)],shell=True)
+		sys.exit()
+	
+
 
 #main data
 
-version = 0.2
+version = 0.3
 hasloadedbefore = os.path.exists("config.snakeos.json")
 configdata = {}
 loginf = None
+boottime = 0
+bboottime = 0
+aboottime = 0
 
 #main functions
 
@@ -53,14 +80,77 @@ def parsecmd(cmd):
 				
 		except Exception as err:
 			print("Failed to check for updates: {}".format(err))
-		
+	if cmd == "changepassword":
+		confirmcha = input("Are you sure you want to change the account password? (y/n)")
+		if confirmcha == 'y':
+			currentpasswd = bcrypt.checkpw(getpass.getpass("Enter your current password: ").encode(),configdata["auth"]["password"].encode())
+			if currentpasswd == True:
+				newpass = getpass.getpass("Enter your new password: ")
+				confirmpasswd = getpass.getpass("Confirm new password: ")
+				if newpass == confirmpasswd:
+					finalconfirm = input("Do you want to change the account password? (y/n)")
+					if finalconfirm == 'y':
+						configdata["auth"]["password"] = bcrypt.hashpw(newpass.encode(),bcrypt.gensalt(14)).decode()
+						configf = open("config.snakeos.json","w")
+						configf.write(json.dumps(configdata))
+						configf.close()
+				else:
+					print("Passwords do not match")
+			else:
+				print("Password not valid. Please try again")
+	if cmd.startswith("dnslookup "):
+		try:
+			domain = cmd.split(" ")[1]
+			try:
+				print(socket.gethostbyname(domain))
+			except:
+				print("Failed to preform DNS Lookup for {}".format(domain))
+		except:
+			print("Failed to preform dnslookup. Invalid command syntax")
+	if cmd.startswith("requesturl "):
+		try:
+			url = cmd.split(" ")
+			url.pop(0)
+			url = " ".join(url)
+			try:
+				req = requests.get(url)
+				print(req.text)
+			except:
+				print("Failed to load {}".format(url))
+		except Exception as err:
+			print("Failed to run requesturl: {}".format(err))
+	if cmd == "reboot":
+		import subprocess
+		print("Shutting down...\n")
+		subprocess.run([sys.executable, " ".join(sys.argv)],shell=True)
+		sys.exit()
+	# the time command and arguments
+	if cmd == "time":
+		print(datetime.datetime.now())
+	if cmd.startswith("time -timezone "):
+		try:
+			timezone = cmd.split(" ")[2]
+			print(datetime.datetime.now(pytz.timezone(timezone)))
+		except Exception as err:
+			if len(cmd.split(" ")) < 3:
+				print("Invalid syntax for time -timezone")
+			else:
+				print(err)
+	if cmd.startswith("time -day"):
+		print(datetime.datetime.now().day)
+	if cmd.startswith("time -hour"):
+		print(datetime.datetime.now().hour)
+	if cmd.startswith("time -utc"):
+		print(datetime.datetime.utcnow())
+	if cmd == "boottime":
+		print("{}".format(boottime))
 
 
 def os_cmd():
 	global configdata
 	try:
 		while True:
-			cmd = input("")
+			cmd = input("> ")
 			parsecmd(cmd)
 	except Exception as err:
 		print(err)
@@ -68,6 +158,7 @@ def os_cmd():
 def login():
 	global configdata
 	global hasloadedbefore
+	global boottime
 	if hasloadedbefore == False:	
 		print("----- SnakeOS -----")
 		print("Please create your account")
@@ -80,11 +171,13 @@ def login():
 		configf = open("config.snakeos.json","w")
 		configf.write(json.dumps(configdata))
 		configf.close()
+		boottime = time.time() - bboottime
 		os_cmd()
 	else:
 		configdata = json.loads(open("config.snakeos.json").read())
 		print("----- SnakeOS -----")
 		print("Please login: ")
+		boottime = time.time() - bboottime
 		uname = input("Enter your username: ")
 		if uname == configdata["auth"]["username"]:
 			passwd = getpass.getpass().encode()
@@ -105,6 +198,7 @@ print("Booting...")
 print("Enter 'login' to login. Enter 'reset' to reset. Enter 'shutdown' to shutdown.")
 options = input("Choice: ")
 if options == "login":
+	bboottime = time.time()
 	login()
 elif options == "reset":
 	print("Resetting SnakeOS will cause all data to be lost")
