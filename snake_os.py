@@ -6,6 +6,14 @@ import time
 import socket
 import datetime
 
+# get boot time
+try:
+	bboottime = time.time()
+except:
+	bboottime = 0
+
+
+
 try:
 	import requests
 	import bcrypt
@@ -36,13 +44,44 @@ hasloadedbefore = os.path.exists("config.snakeos.json")
 configdata = {}
 loginf = None
 boottime = 0
-bboottime = 0
 aboottime = 0
+systemconfnames = ["System.systemname","System.Security.PIC.mode"]
 
 #main functions
 
-def parsecmd(cmd):
+def readconf(confname):
+	try:
+		return configdata["conf"][confname]
+	except:
+		return None
+
+def requires_evevation(command):
+	comd = {"1":["sysconf write","sysconf delete"]}
+
+def parsecmd(cmd,runelevated=False):
 	global hasloadedbefore
+	global configdata
+	
+	
+	# runelevated
+	if cmd.startswith("runelevated "):
+		if runelevated == True:
+			newcmd = cmd.split(" ")
+			newcmd.pop(0)
+			parsecmd(" ".join(newcmd),runelevated=True)
+			return None
+		if readconf("System.Security.PIC.mode") != '0':
+			passw = bcrypt.checkpw(getpass.getpass("Enter your password to request elevation: ").encode(),configdata["auth"]["password"].encode())
+			if passw == False:
+				print("runelevated: Incorrect password")
+				return None
+		newcmd = cmd.split(" ")
+		newcmd.pop(0)
+		parsecmd(" ".join(newcmd),runelevated=True)
+		return None
+		
+	
+	
 	if cmd == "getuser":
 		print(configdata["auth"]["username"])
 	if cmd == "reset":
@@ -122,7 +161,7 @@ def parsecmd(cmd):
 	if cmd == "reboot":
 		import subprocess
 		print("Shutting down...\n")
-		subprocess.run([sys.executable, " ".join(sys.argv)],shell=True)
+		subprocess.run([sys.executable, " ".join(sys.argv)])
 		sys.exit()
 	# the time command and arguments
 	if cmd == "time":
@@ -144,6 +183,60 @@ def parsecmd(cmd):
 		print(datetime.datetime.utcnow())
 	if cmd == "boottime":
 		print("{}".format(boottime))
+	# system config
+	if cmd.startswith("sysconf "):
+		try:
+			if configdata["conf"] == None:
+				configdata["conf"] = {}
+		except:
+			configdata["conf"] = {}
+		if cmd.startswith("sysconf read "):
+			try:
+				confname = cmd.split(" ")[2]
+				try:
+					print(configdata["conf"][confname])
+				except:
+					print("{} not found".format(confname))
+			except:
+				print("Invalid command syntax for sysconf")
+		elif cmd.startswith("sysconf write "):
+			if runelevated == True:
+				try:
+					confname = cmd.split(" ")[2]
+					confvalue = cmd.split(" ")[3]
+					configdata["conf"][confname] = confvalue
+					configf = open("config.snakeos.json","w")
+					configf.write(json.dumps(configdata))
+					configf.close()
+				except Exception as err:
+					print("Invalid command syntax for sysconf: {}".format(err))
+			else:
+				print("Access denied: Please retry with elevation")
+		elif cmd.startswith("sysconf delete "):
+			if runelevated == True:
+				try:
+					confname = cmd.split(" ")[2]
+					if confname in systemconfnames:
+						print("Can not delete part of critical system configuration: {}".format(confname))
+					else:
+						del configdata["conf"][confname]
+					configf = open("config.snakeos.json","w")
+					configf.write(json.dumps(configdata))
+					configf.close()
+				except:
+					print("Invalid command syntax for sysconf")
+			else:
+				print("Access denied: Please retry with elevation")
+		elif cmd == "sysconf listconf":
+			try:
+				for config_part in configdata["conf"]:
+					print("{}:{}".format(config_part,configdata["conf"][config_part]))
+			except Exception as err:
+				print("Failed to list: {}".format(err))
+		else:
+			print("sysconf: Command not found")
+	if cmd == "localip":
+		print(socket.gethostbyname(socket.gethostname()))
 
 
 def os_cmd():
@@ -163,6 +256,7 @@ def login():
 		print("----- SnakeOS -----")
 		print("Please create your account")
 		configdata["auth"] = {}
+		configdata["conf"] = {"System.Security.PIC.mode":"1"}
 		uname = input("Enter a username: ")
 		configdata["auth"]["username"] = uname
 		passwd = getpass.getpass("Enter a password for this account: ")
@@ -198,7 +292,6 @@ print("Booting...")
 print("Enter 'login' to login. Enter 'reset' to reset. Enter 'shutdown' to shutdown.")
 options = input("Choice: ")
 if options == "login":
-	bboottime = time.time()
 	login()
 elif options == "reset":
 	print("Resetting SnakeOS will cause all data to be lost")
