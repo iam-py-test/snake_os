@@ -1,0 +1,9 @@
+{
+  "helloworld":{
+    "title":"Hello World!",
+    "file":"helloworld.snakeapp",
+    "url":"",
+    "desc":"A test app writen for SnakeOS",
+    "perm":[]
+  }
+}
