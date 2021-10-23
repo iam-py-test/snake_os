@@ -1,0 +1,6 @@
+# TITLE: Hello world! 
+
+! imports
+IMPORT output
+
+output.print "Hello world"
