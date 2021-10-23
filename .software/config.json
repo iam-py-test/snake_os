@@ -5,6 +5,6 @@
     "url":"https://raw.githubusercontent.com/iam-py-test/snake_os/main/.software/helloworld.snakeapp",
     "desc":"A test app writen for SnakeOS",
     "perm":[],
-    "version":"1.0"
+    "version":1.0
   }
 }
