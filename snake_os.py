@@ -386,6 +386,20 @@ def parsecmd(cmd,runelevated=False):
 				configf.close()
 			except Exception as err:
 				print("Failed to create alias: {}".format(err))
+		elif cmd.startswith("alias delete "):
+			try:
+				alias = cmd.split(" ")[2]
+				try:
+					if configdata["alias"] == None:
+						configdata["alias"] = {}
+				except:
+					configdata["alias"] = {}
+				del configdata["alias"][alias]
+				configf = open("config.snakeos.json","w")
+				configf.write(json.dumps(configdata))
+				configf.close()
+			except Exception as err:
+				print("Failed to delete alias: {}".format(err))
 	elif cmd.startswith("hashtools"):
 		try:
 			text = cmd.split(" ")
