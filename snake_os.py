@@ -5,6 +5,7 @@ import sys
 import time
 import socket
 import datetime
+import hashlib
 
 # get boot time
 try:
@@ -39,13 +40,13 @@ except:
 
 #main data
 
-version = 0.3
+version = 0.41
 hasloadedbefore = os.path.exists("config.snakeos.json")
 configdata = {}
 loginf = None
 boottime = 0
 aboottime = 0
-systemconfnames = ["System.systemname","System.Security.PIC.mode"]
+systemconfnames = ["System.systemname","System.Security.PIC.mode","System.Security.Software.verifyIntegrity","System.Software.integrityCheckDisabled"]
 
 #main functions
 
@@ -57,6 +58,56 @@ def readconf(confname):
 
 def requires_evevation(command):
 	comd = {"1":["sysconf write","sysconf delete"]}
+
+def parse_app(app):
+	lines = app["code"].split("\n")
+	appimports = []
+	appvars = {}
+	for line in lines:
+		try:
+			if line.startswith("#") or line == "":
+				continue
+			if line.startswith("IMPORT "):
+				impname = line.split(" ")[1]
+				appimports.append(impname)
+			try:
+				if line.split(".")[0] in appimports:
+					if line.split(".")[0] == "output":
+						if line.split(".")[1].split(" ")[0] == "print":
+							text = line.split(".")[1].split(" ")
+							text.pop(0)
+							text = " ".join(text)
+							if text.startswith("\""):
+								text = text[1:-1]
+								print(text)
+						elif line.split(".")[1].split(" ")[0] == "printvar":
+							text = line.split(".")[1].split(" ")
+							text.pop(0)
+							text = " ".join(text)
+							try:
+								print(appvars[text])
+							except:
+								print("SnakeOS script error: var {} not found".format(text))
+			except:
+				pass
+			try:
+				if line.startswith("setvar "):
+					varname = line.split(" ")[1]
+					varvalue = line.split(" ")
+					varvalue.pop(0)
+					varvalue.pop(0)
+					varvalue = " ".join(varvalue)
+					varvalue = varvalue.split("= ")
+					varvalue.pop(0)
+					varvalue = "= ".join(varvalue)
+					varvalue = varvalue[1:-1]
+					appvars[varname] = varvalue
+			except Exception as err:
+				print(err)
+
+					
+		except:
+			pass
 
 def parsecmd(cmd,runelevated=False):
 	global hasloadedbefore
@@ -79,22 +130,20 @@ def parsecmd(cmd,runelevated=False):
 		newcmd.pop(0)
 		parsecmd(" ".join(newcmd),runelevated=True)
 		return None
-		
-	
 	
 	if cmd == "getuser":
 		print(configdata["auth"]["username"])
-	if cmd == "reset":
+	elif cmd == "reset":
 		print("Resetting SnakeOS will cause all data in SnakeOS to be deleted, and you will have to recreate your account.")
 		confirm = input("Confirm: Do you want to reset SnakeOS? (y/n) ")
 		if confirm == "y":
 			os.remove("config.snakeos.json")
 			hasloadedbefore = False
 			loginf()
-	if cmd == "shutdown":
+	elif cmd == "shutdown":
 		print("Shutting down SnakeOS")
 		sys.exit()
-	if cmd == "updates check":
+	elif cmd == "updates check":
 		try:
 			cversion = float(requests.get("https://raw.githubusercontent.com/iam-py-test/snake_os/main/version.txt").text)
 			if cversion > version:
@@ -103,9 +152,9 @@ def parsecmd(cmd,runelevated=False):
 				print("You are running the latest version of SnakeOS")
 		except Exception as err:
 			print("Failed to check for updates: {}".format(err))
-	if cmd == "updates version":
+	elif cmd == "updates version":
 		print("You are running SnakeOS version {}".format(version))
-	if cmd == "updates install":
+	elif cmd == "updates install":
 		try:
 			cversion = float(requests.get("https://raw.githubusercontent.com/iam-py-test/snake_os/main/version.txt").text)
 			print("This will erase any changes made to this file, but will leave your account intact")
@@ -119,7 +168,7 @@ def parsecmd(cmd,runelevated=False):
 				
 		except Exception as err:
 			print("Failed to check for updates: {}".format(err))
-	if cmd == "changepassword":
+	elif cmd == "changepassword":
 		confirmcha = input("Are you sure you want to change the account password? (y/n)")
 		if confirmcha == 'y':
 			currentpasswd = bcrypt.checkpw(getpass.getpass("Enter your current password: ").encode(),configdata["auth"]["password"].encode())
@@ -137,7 +186,7 @@ def parsecmd(cmd,runelevated=False):
 					print("Passwords do not match")
 			else:
 				print("Password not valid. Please try again")
-	if cmd.startswith("dnslookup "):
+	elif cmd.startswith("dnslookup "):
 		try:
 			domain = cmd.split(" ")[1]
 			try:
@@ -146,7 +195,7 @@ def parsecmd(cmd,runelevated=False):
 				print("Failed to preform DNS Lookup for {}".format(domain))
 		except:
 			print("Failed to preform dnslookup. Invalid command syntax")
-	if cmd.startswith("requesturl "):
+	elif cmd.startswith("requesturl "):
 		try:
 			url = cmd.split(" ")
 			url.pop(0)
@@ -158,15 +207,15 @@ def parsecmd(cmd,runelevated=False):
 				print("Failed to load {}".format(url))
 		except Exception as err:
 			print("Failed to run requesturl: {}".format(err))
-	if cmd == "reboot":
+	elif cmd == "reboot":
 		import subprocess
 		print("Shutting down...\n")
 		subprocess.run([sys.executable, " ".join(sys.argv)])
 		sys.exit()
 	# the time command and arguments
-	if cmd == "time":
+	elif cmd == "time":
 		print(datetime.datetime.now())
-	if cmd.startswith("time -timezone "):
+	elif cmd.startswith("time -timezone "):
 		try:
 			timezone = cmd.split(" ")[2]
 			print(datetime.datetime.now(pytz.timezone(timezone)))
@@ -175,16 +224,16 @@ def parsecmd(cmd,runelevated=False):
 				print("Invalid syntax for time -timezone")
 			else:
 				print(err)
-	if cmd.startswith("time -day"):
+	elif cmd.startswith("time -day"):
 		print(datetime.datetime.now().day)
-	if cmd.startswith("time -hour"):
+	elif cmd.startswith("time -hour"):
 		print(datetime.datetime.now().hour)
-	if cmd.startswith("time -utc"):
+	elif cmd.startswith("time -utc"):
 		print(datetime.datetime.utcnow())
-	if cmd == "boottime":
+	elif cmd == "boottime":
 		print("{}".format(boottime))
 	# system config
-	if cmd.startswith("sysconf "):
+	elif cmd.startswith("sysconf "):
 		try:
 			if configdata["conf"] == None:
 				configdata["conf"] = {}
@@ -235,8 +284,135 @@ def parsecmd(cmd,runelevated=False):
 				print("Failed to list: {}".format(err))
 		else:
 			print("sysconf: Command not found")
-	if cmd == "localip":
+	elif cmd == "localip":
 		print(socket.gethostbyname(socket.gethostname()))
+	elif cmd.startswith("software "):
+		if cmd.startswith("software install "):
+			if runelevated == True:
+				try:
+					softname = cmd.split(" ")[2]
+					softmanifest = json.loads(requests.get("https://raw.githubusercontent.com/iam-py-test/snake_os/main/.software/config.json").text)
+					print("Are you sure you want to install '{}'? ".format(softname))
+					print("Description: {}".format(softmanifest[softname]["desc"]))
+					if input("Type 'y' to install: ") == "y":
+						content = requests.get(softmanifest[softname]["url"]).text
+						try:
+							if configdata["software"] == None:
+								configdata["software"] = {}
+						except:
+							configdata["software"] = {}
+						configdata["software"][softname] = {"desc":softmanifest[softname]["desc"],"code":content,"version":softmanifest[softname]["version"],"integrity":hashlib.sha512(content.encode()).hexdigest()}
+						configf = open("config.snakeos.json","w")
+						configf.write(json.dumps(configdata))
+						configf.close()
+				except Exception as err:
+					print("Install error: {}".format(err))
+			else:
+				print("Access denied: Please retry with elevation")
+		elif cmd.startswith("software run "):
+			try:
+				softname = cmd.split(" ")[2]
+				integrityneeded = readconf("System.Security.Software.verifyIntegrity") == "1" or readconf("System.Software.integrityCheckDisabled") != "1"
+				try:
+					if configdata["software"] == None:
+							configdata["software"] = {}
+				except:
+						configdata["software"] = {}
+				try:
+					soft = configdata["software"][softname]
+					contenthash = hashlib.sha512(soft["code"].encode()).hexdigest()
+					if contenthash == soft["integrity"] or integrityneeded == False:
+						parse_app(soft)
+					else:
+						print("Integrity of '{}' could not be verified".format(softname))
+						if input("Reinstall? (y/n) ") == "y":
+							parsecmd("runelevated software install {}".format(softname))
+				except Exception as err:
+					print("{} not installed: {}".format(softname,err))
+			except:
+				pass
+		elif cmd.startswith("software uninstall "):
+			if runelevated == True:
+				try:
+					softname = cmd.split(" ")[2]
+					print("Are you sure you want to uninstall '{}'? ".format(softname))
+					if input("Type 'y' to uninstall: ") == "y":
+						try:
+							if configdata["software"] == None:
+								configdata["software"] = {}
+						except:
+							configdata["software"] = {}
+						del configdata["software"][softname]
+						configf = open("config.snakeos.json","w")
+						configf.write(json.dumps(configdata))
+						configf.close()
+				except Exception as err:
+					print("Uninstall error: {}".format(err))
+			else:
+				print("Access denied: Please retry with elevation")
+		elif cmd == "software update":
+			try:
+				softmanifest = json.loads(requests.get("https://raw.githubusercontent.com/iam-py-test/snake_os/main/.software/config.json").text)
+				for softname in softmanifest:
+					try:
+						if configdata["software"][softname]["version"] < softmanifest[softname]["version"]:
+							print("Updating {} from version {} to {}".format(softname,configdata["software"][softname]["version"],softmanifest[softname]["version"]))
+							content = requests.get(softmanifest[softname]["url"]).text
+							configdata["software"][softname] = {"desc":softmanifest[softname]["desc"],"code":content,"version":softmanifest[softname]["version"],"integrity":hashlib.sha512(content.encode()).hexdigest()}
+					except:
+						continue
+				configf = open("config.snakeos.json","w")
+				configf.write(json.dumps(configdata))
+				configf.close()
+			except:
+				print("Update error")
+	elif cmd.startswith("alias "):
+		if cmd.startswith("alias create "):
+			try:
+				alias = cmd.split(" ")[2]
+				cmdtorun = cmd.split(" ")
+				cmdtorun.pop(0)
+				cmdtorun.pop(0)
+				cmdtorun.pop(0)
+				cmdtorun = " ".join(cmdtorun)
+				try:
+					if configdata["alias"] == None:
+						configdata["alias"] = {}
+				except:
+					configdata["alias"] = {}
+				configdata["alias"][alias] = cmdtorun
+				configf = open("config.snakeos.json","w")
+				configf.write(json.dumps(configdata))
+				configf.close()
+			except Exception as err:
+				print("Failed to create alias: {}".format(err))
+	elif cmd.startswith("hashtools"):
+		try:
+			text = cmd.split(" ")
+			text.pop(0)
+			text.pop(0)
+			text = " ".join(text)
+			cmdname = cmd.split(" ")[1]
+			if cmdname == "sha256":
+				print(hashlib.sha256(text.encode()).hexdigest())
+			elif cmdname == "sha512":
+				print(hashlib.sha512(text.encode()).hexdigest())
+			elif cmdname == "sha1":
+				print(hashlib.sha1(text.encode()).hexdigest())
+			elif cmdname == "md5":
+				print(hashlib.md5(text.encode()).hexdigest())
+			else:
+				print("Hashtools: {} is not a valid hashtool".format(cmdname))
+		except Exception as err:
+			print("Hashtools error: {}".format(err))
+			
+	else:
+		try:
+			parsecmd(configdata["alias"][cmd])
+			return None
+		except Exception as err:
+			pass
+		print("Command not found: {}".format(cmd))
 
 
 def os_cmd():
@@ -252,39 +428,45 @@ def login():
 	global configdata
 	global hasloadedbefore
 	global boottime
-	if hasloadedbefore == False:	
-		print("----- SnakeOS -----")
-		print("Please create your account")
-		configdata["auth"] = {}
-		configdata["conf"] = {"System.Security.PIC.mode":"1"}
-		uname = input("Enter a username: ")
-		configdata["auth"]["username"] = uname
-		passwd = getpass.getpass("Enter a password for this account: ")
-		hashed = bcrypt.hashpw(passwd.encode(),bcrypt.gensalt(14))
-		configdata["auth"]["password"] = hashed.decode()
-		configf = open("config.snakeos.json","w")
-		configf.write(json.dumps(configdata))
-		configf.close()
-		boottime = time.time() - bboottime
-		os_cmd()
-	else:
-		configdata = json.loads(open("config.snakeos.json").read())
-		print("----- SnakeOS -----")
-		print("Please login: ")
-		boottime = time.time() - bboottime
-		uname = input("Enter your username: ")
-		if uname == configdata["auth"]["username"]:
-			passwd = getpass.getpass().encode()
-			if bcrypt.checkpw(passwd,configdata["auth"]["password"].encode()):
-				print("Password valid")
-				try:
-					os_cmd()
-				except:
-					sys.exit()
-			else:
-				print("Password invalid")
+	try:
+		if hasloadedbefore == False:	
+			print("----- SnakeOS -----")
+			print("Please create your account")
+			configdata["auth"] = {}
+			configdata["conf"] = {"System.Security.PIC.mode":"1","System.Security.Software.verifyIntegrity":"1"}
+			configdata["software"] = {}
+			configdata["alias"] = {}
+			uname = input("Enter a username: ")
+			configdata["auth"]["username"] = uname
+			passwd = getpass.getpass("Enter a password for this account: ")
+			hashed = bcrypt.hashpw(passwd.encode(),bcrypt.gensalt(14))
+			configdata["auth"]["password"] = hashed.decode()
+			configf = open("config.snakeos.json","w")
+			configf.write(json.dumps(configdata))
+			configf.close()
+			boottime = time.time() - bboottime
+			os_cmd()
 		else:
-			print("User does not exist")
+			configdata = json.loads(open("config.snakeos.json").read())
+			print("----- SnakeOS -----")
+			print("Please login: ")
+			boottime = time.time() - bboottime
+			uname = input("Enter your username: ")
+			if uname == configdata["auth"]["username"]:
+				passwd = getpass.getpass().encode()
+				if bcrypt.checkpw(passwd,configdata["auth"]["password"].encode()):
+					print("Password valid")
+					try:
+						os_cmd()
+					except:
+						sys.exit()
+				else:
+					print("Password invalid")
+			else:
+				print("User does not exist")
+	except Exception as err:
+		print("Failed to boot: {}".format(err))
+		print("If this error persists, try resetting via the boot menu")
 
 #boot and pre-boot
 loginf = login
