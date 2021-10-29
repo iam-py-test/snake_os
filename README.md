@@ -3,8 +3,8 @@ An operating system written in Python
 
 ### What is SnakeOS
 
-SnakeOS is a personal project with the end goal of creating a fully-functional operating system written in Python.
-![image](https://user-images.githubusercontent.com/84232764/137650317-552df9f3-5031-49fe-8670-5200f2123857.png)
+SnakeOS is a personal project with the end goal of creating a fully-functional operating system written in Python.<br>
+![image](https://user-images.githubusercontent.com/84232764/139426877-a047ae50-ac48-4b91-9bd3-0c13d0dcbaf3.png)
 
 
 ### Can I replace my current OS with SnakeOS or run it along side it?
