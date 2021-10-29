@@ -25,7 +25,7 @@ except:
 	subprocess.Popen(sys.executable + " -m pip install requests", stdout=devnull, stderr=devnull)
 	subprocess.Popen(sys.executable + " -m pip install bcrypt", stdout=devnull, stderr=devnull)
 	subprocess.Popen(sys.executable + " -m pip install pytz", stdout=devnull, stderr=devnull)
-	time.sleep(5)
+	time.sleep(15)
 	try:
 		import bcrypt
 		import requests
@@ -40,13 +40,13 @@ except:
 
 #main data
 
-version = 0.41
+version = 0.5
 hasloadedbefore = os.path.exists("config.snakeos.json")
 configdata = {}
 loginf = None
 boottime = 0
 aboottime = 0
-systemconfnames = ["System.systemname","System.Security.PIC.mode","System.Security.Software.verifyIntegrity","System.Software.integrityCheckDisabled"]
+systemconfnames = ["System.systemname","System.Security.PIC.mode","System.Security.Software.verifyIntegrity","System.Software.integrityCheckDisabled","System.Security.PIC.disabled","System.Security.PIC.requires_evevation"]
 
 #main functions
 
@@ -56,8 +56,10 @@ def readconf(confname):
 	except:
 		return None
 
-def requires_evevation(command):
-	comd = {"1":["sysconf write","sysconf delete"]}
+def pic_enabled():
+	if readconf("System.Security.PIC.disabled") == "1" and readconf("System.Security.PIC.requires_evevation") == "0":
+		return False
+	return True
 
 def parse_app(app):
 	lines = app["code"].split("\n")
@@ -105,7 +107,7 @@ def parse_app(app):
 			except Exception as err:
 				print(err)
 
-					
+			
 		except:
 			pass
 
@@ -249,10 +251,13 @@ def parsecmd(cmd,runelevated=False):
 			except:
 				print("Invalid command syntax for sysconf")
 		elif cmd.startswith("sysconf write "):
-			if runelevated == True:
+			if runelevated == True or pic_enabled() == False:
 				try:
 					confname = cmd.split(" ")[2]
 					confvalue = cmd.split(" ")[3]
+					if confname.startswith("System.Security.PIC."):
+						if input("Are you are you want to modify PIC settings? (y/n)") != "y":
+							return None
 					configdata["conf"][confname] = confvalue
 					configf = open("config.snakeos.json","w")
 					configf.write(json.dumps(configdata))
@@ -262,7 +267,7 @@ def parsecmd(cmd,runelevated=False):
 			else:
 				print("Access denied: Please retry with elevation")
 		elif cmd.startswith("sysconf delete "):
-			if runelevated == True:
+			if runelevated == True or pic_enabled() == False:
 				try:
 					confname = cmd.split(" ")[2]
 					if confname in systemconfnames:
@@ -288,7 +293,7 @@ def parsecmd(cmd,runelevated=False):
 		print(socket.gethostbyname(socket.gethostname()))
 	elif cmd.startswith("software "):
 		if cmd.startswith("software install "):
-			if runelevated == True:
+			if runelevated == True or pic_enabled() == False:
 				try:
 					softname = cmd.split(" ")[2]
 					softmanifest = json.loads(requests.get("https://raw.githubusercontent.com/iam-py-test/snake_os/main/.software/config.json").text)
@@ -332,7 +337,7 @@ def parsecmd(cmd,runelevated=False):
 			except:
 				pass
 		elif cmd.startswith("software uninstall "):
-			if runelevated == True:
+			if runelevated == True or pic_enabled() == False:
 				try:
 					softname = cmd.split(" ")[2]
 					print("Are you sure you want to uninstall '{}'? ".format(softname))
@@ -407,14 +412,26 @@ def parsecmd(cmd,runelevated=False):
 			text.pop(0)
 			text = " ".join(text)
 			cmdname = cmd.split(" ")[1]
-			if cmdname == "sha256":
-				print(hashlib.sha256(text.encode()).hexdigest())
-			elif cmdname == "sha512":
+			if cmdname == "sha512":
 				print(hashlib.sha512(text.encode()).hexdigest())
+			elif cmdname ==  "sha384":
+				print(hashlib.sha384(text.encode()).hexdigest())
+			elif cmdname == "sha256":
+				print(hashlib.sha256(text.encode()).hexdigest())
+			elif cmdname == "sha224":
+				print(hashlib.sha224(text.encode()).hexdigest())
 			elif cmdname == "sha1":
 				print(hashlib.sha1(text.encode()).hexdigest())
 			elif cmdname == "md5":
 				print(hashlib.md5(text.encode()).hexdigest())
+			elif cmdname == "help":
+				print("hashtools sha512 [string]: Returns the sha512 digest of [string]")
+				print("hashtools sha384 [string]: Returns the sha384 digest of [string]")
+				print("hashtools sha256 [string]: Returns the sha256 digest of [string]")
+				print("hashtools sha224 [string]: Returns the sha224 digest of [string]")
+				print("hashtools sha1 [string]: Returns the sha1 digest of [string]")
+				print("hashtools md5 [string]: Returns the md5 digest of [string]")
+				print("hashtools help: Displays this help screen")
 			else:
 				print("Hashtools: {} is not a valid hashtool".format(cmdname))
 		except Exception as err:
