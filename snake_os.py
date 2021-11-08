@@ -5,6 +5,7 @@ import sys
 import time
 import socket
 import datetime
+from urllib.parse import urlparse
 import hashlib
 
 # get boot time
@@ -40,13 +41,13 @@ except:
 
 #main data
 
-version = 0.5
+version = 0.51
 hasloadedbefore = os.path.exists("config.snakeos.json")
 configdata = {}
 loginf = None
 boottime = 0
 aboottime = 0
-systemconfnames = ["System.systemname","System.Security.PIC.mode","System.Security.Software.verifyIntegrity","System.Software.integrityCheckDisabled","System.Security.PIC.disabled","System.Security.PIC.requires_evevation"]
+systemconfnames = ["System.systemname","System.Security.PIC.mode","System.Security.Software.verifyIntegrity","System.Software.integrityCheckDisabled","System.Security.PIC.disabled","System.Security.PIC.requires_evevation","System.Security.Firewall.denyrules","System.Security.Firewall.allowrules"]
 
 #main functions
 
@@ -60,6 +61,22 @@ def pic_enabled():
 	if readconf("System.Security.PIC.disabled") == "1" and readconf("System.Security.PIC.requires_evevation") == "0":
 		return False
 	return True
+
+def firewall_check(domain):
+	try:
+		mode = readconf("System.Security.Firewall.mode")
+		denyrules = json.loads(readconf("System.Security.Firewall.denyrules"))
+		allowrules = json.loads(readconf("System.Security.Firewall.allowrules"))
+		if mode == "0":
+			return True
+		elif mode == "1":
+			return domain not in denyrules
+		elif mode == "2":
+			return domain in allowrules
+		else:
+			return True
+	except:
+		pass
 
 def parse_app(app):
 	lines = app["code"].split("\n")
@@ -134,7 +151,10 @@ def parsecmd(cmd,runelevated=False):
 		return None
 	
 	if cmd == "getuser":
-		print(configdata["auth"]["username"])
+		if runelevated == True:
+			print("root")
+		else:
+			print(configdata["auth"]["username"])
 	elif cmd == "reset":
 		print("Resetting SnakeOS will cause all data in SnakeOS to be deleted, and you will have to recreate your account.")
 		confirm = input("Confirm: Do you want to reset SnakeOS? (y/n) ")
@@ -144,6 +164,9 @@ def parsecmd(cmd,runelevated=False):
 			loginf()
 	elif cmd == "shutdown":
 		print("Shutting down SnakeOS")
+		configf = open("config.snakeos.json","w")
+		configf.write(json.dumps(configdata))
+		configf.close()
 		sys.exit()
 	elif cmd == "updates check":
 		try:
@@ -202,6 +225,10 @@ def parsecmd(cmd,runelevated=False):
 			url = cmd.split(" ")
 			url.pop(0)
 			url = " ".join(url)
+			domain = urlparse(url).netloc
+			if firewall_check(domain) == False:
+				print("Failed to load {}: Blocked by Firewall".format(url))
+				return
 			try:
 				req = requests.get(url)
 				print(req.text)
@@ -212,6 +239,9 @@ def parsecmd(cmd,runelevated=False):
 	elif cmd == "reboot":
 		import subprocess
 		print("Shutting down...\n")
+		configf = open("config.snakeos.json","w")
+		configf.write(json.dumps(configdata))
+		configf.close()
 		subprocess.run([sys.executable, " ".join(sys.argv)])
 		sys.exit()
 	# the time command and arguments
@@ -436,14 +466,215 @@ def parsecmd(cmd,runelevated=False):
 				print("Hashtools: {} is not a valid hashtool".format(cmdname))
 		except Exception as err:
 			print("Hashtools error: {}".format(err))
+	elif cmd.startswith("math "):
+		try:
+			mr = cmd.split(" ")
+			mr.pop(0)
+			mr = " ".join(mr)
+			#parsing mathematical expressions - https://stackoverflow.com/a/9558001
+			import ast
+			import operator as op
+
+			# supported operators
+			operators = {ast.Add: op.add, ast.Sub: op.sub, ast.Mult: op.mul,
+             ast.Div: op.truediv, ast.Pow: op.pow, ast.BitXor: op.xor,
+             ast.USub: op.neg}
+
+			def eval_expr(expr):
+				"""
+				>>> eval_expr('2^6')
+				4
+				>>> eval_expr('2**6')
+				64
+				>>> eval_expr('1 + 2*3**(4^5) / (6 + -7)')
+				-5.0
+				"""
+				return eval_(ast.parse(expr, mode='eval').body)
+
+			def eval_(node):
+				if isinstance(node, ast.Num): # <number>
+					return node.n
+				elif isinstance(node, ast.BinOp): # <left> <operator> <right>
+					return operators[type(node.op)](eval_(node.left), eval_(node.right))
+				elif isinstance(node, ast.UnaryOp): # <operator> <operand> e.g., -1
+					return operators[type(node.op)](eval_(node.operand))
+				else:
+					raise TypeError(node)
+			print(eval_expr(mr))
+		except Exception as err:
+			print(err)
+	elif cmd.startswith("eval "):
+		try:
+			newcmd = cmd.split(" ")
+			newcmd.pop(0)
+			newcmd = " ".join(newcmd)
+			parsecmd(newcmd,runelevated=False)
+		except Exception as err:
+			print(err)
+	elif cmd.startswith("echo "):
+		try:
+			toecho = cmd.split(" ")
+			toecho.pop(0)
+			toecho = " ".join(toecho)
+			print(toecho)
+		except Exception as err:
+			print(err)
+	elif cmd == "netdig":
+		print("Running network diagnostic...")
+		try:
+			if socket.gethostbyname("example.com") == "0.0.0.0":
+				raise Exception("Example.com === 0.0.0.0")
+			else:
+				print("DNS resolves successfully ")
+		except Exception as err:
+			print("Error in resolving DNS: {}".format(err))
+		try:
+			requests.get("http://example.com")
+		except Exception as err:
+			print("Error in contacting website: {}".format(err))
+		else:
+			print("Able to contact websites")
+		try:
+			requests.get("https://example.com")
+		except Exception as err:
+			print("Unable to connect to a website over TLS: {}".format(err))
+		else:
+			print("Able to connect to websites over TLS")
+		try:
+			req = requests.get("https://raw.githubusercontent.com/iam-py-test/snake_os/main/version.txt")
+			if req.status_code != 200:
+				raise Exception("Not found?")
+		except Exception as err:
+			print("Error in contacting server: {}".format(err))
+		else:
+			print("Able to contact server")
+	elif cmd.startswith("firewall "):
+		if cmd.startswith("firewall listrules"):
+			try:
+				denyrules = json.loads(readconf("System.Security.Firewall.denyrules"))
+			except:
+				print("No deny rules")
+			else:
+				if denyrules == []:
+					print("No deny rules")
+				else:
+					print("Denied domains/ips: ")
+					for rule in denyrules:
+						print(rule)
+			try:
+				allowrules = json.loads(readconf("System.Security.Firewall.allowrules"))
+			except:
+				print("No allow rules")
+			else:
+				if denyrules == []:
+					print("No allow rules")
+				else:
+					print("Allowed domains/ips: ")
+					for rule in allowrules:
+						print(rule)
+		elif cmd.startswith("firewall allow "):
+			if runelevated == True:
+				domain = cmd.split(" ")[2]
+				try:
+					allowrules = json.loads(readconf("System.Security.Firewall.allowrules"))
+				except:
+					allowrules = []
+				allowrules.append(domain)
+				configdata["conf"]["System.Security.Firewall.allowrules"] = json.dumps(allowrules)
+			else:
+				print("Access denied")
+		elif cmd.startswith("firewall deny "):
+			if runelevated == True:
+				domain = cmd.split(" ")[2]
+				try:
+					denyrules = json.loads(readconf("System.Security.Firewall.denyrules"))
+				except:
+					denyrules = []
+				denyrules.append(domain)
+				configdata["conf"]["System.Security.Firewall.denyrules"] = json.dumps(denyrules)
+			else:
+				print("Access denied")
+		elif cmd == ("firewall mode"):
+			print(readconf("System.Security.Firewall.mode"))
+		elif cmd.startswith("firewall mode "):
+			if runelevated == True:
+				configdata["conf"]["System.Security.Firewall.mode"] = cmd.split(" ")[2]
+				configf = open("config.snakeos.json","w")
+				configf.write(json.dumps(configdata))
+				configf.close()
+			else:
+				print("Access denied")
+		elif cmd.startswith("firewall denyrules.remove "):
+			if runelevated == True:
+				domain = cmd.split(" ")[2]
+				try:
+					denyrules = json.loads(readconf("System.Security.Firewall.denyrules"))
+				except:
+					denyrules = []
+				denyrules.remove(domain)
+				configdata["conf"]["System.Security.Firewall.denyrules"] = json.dumps(denyrules)
+			else:
+				print("Access denied")
+		elif cmd.startswith("firewall allowrules.remove "):
+			if runelevated == True:
+				domain = cmd.split(" ")[2]
+				try:
+					allowrules = json.loads(readconf("System.Security.Firewall.allowrules"))
+				except:
+					allowrules = []
+				allowrules.remove(domain)
+				configdata["conf"]["System.Security.Firewall.allowrules"] = json.dumps(allowrules)
+			else:
+				print("Access denied")
 			
+	elif cmd.startswith("base64 "):
+		if cmd.startswith("base64 encode "):
+			try:
+				str = cmd.split(" ")
+				str.pop(0)
+				str.pop(0)
+				str = " ".join(str)
+				import base64
+				print(base64.b64encode(str.encode()).decode())
+			except Exception as err:
+				print(err)
+		elif cmd.startswith("base64 decode "):
+			try:
+				str = cmd.split(" ")
+				str.pop(0)
+				str.pop(0)
+				str = " ".join(str)
+				import base64
+				print(base64.b64decode(str.encode()).decode())
+			except Exception as err:
+				print(err)
+		else:
+			print("base64: Command not found")
+	elif cmd == "randomnumb":
+		try:
+			import random
+			print(random.randrange(0,random.choice([20,random.randrange(30,9000),random.randrange(100,90000)])))
+		except Exception as err:
+			print(err)
+	elif cmd.startswith("runtimes "):
+		try:
+			times = int(cmd.split(" ")[1])
+			d = 0
+			cmd2 = cmd.split(" ")
+			cmd2.pop(0)
+			cmd2.pop(0)
+			cmd2 = " ".join(cmd2)
+			while d < times:
+				parsecmd(cmd2)
+				d += 1
+		except Exception as err:
+			print(err)
 	else:
 		try:
 			parsecmd(configdata["alias"][cmd])
 			return None
 		except Exception as err:
-			pass
-		print("Command not found: {}".format(cmd))
+			print("Command not found: {}".format(cmd))
 
 
 def os_cmd():
@@ -451,7 +682,10 @@ def os_cmd():
 	try:
 		while True:
 			cmd = input("> ")
-			parsecmd(cmd)
+			try:
+				parsecmd(cmd)
+			except KeyboardInterrupt as err:
+				pass
 	except Exception as err:
 		print(err)
 
@@ -464,7 +698,7 @@ def login():
 			print("----- SnakeOS -----")
 			print("Please create your account")
 			configdata["auth"] = {}
-			configdata["conf"] = {"System.Security.PIC.mode":"1","System.Security.Software.verifyIntegrity":"1"}
+			configdata["conf"] = {"System.Security.PIC.mode":"1","System.Security.Software.verifyIntegrity":"1","System.Security.Firewall.mode":"1","System.Security.Firewall.allowrules":"[]","System.Security.Firewall.denyrules":"[]"}
 			configdata["software"] = {}
 			configdata["alias"] = {}
 			uname = input("Enter a username: ")
