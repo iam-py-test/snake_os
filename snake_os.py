@@ -48,6 +48,7 @@ loginf = None
 boottime = 0
 aboottime = 0
 systemconfnames = ["System.systemname","System.Security.PIC.mode","System.Security.Software.verifyIntegrity","System.Software.integrityCheckDisabled","System.Security.PIC.disabled","System.Security.PIC.requires_evevation","System.Security.Firewall.denyrules","System.Security.Firewall.allowrules"]
+snake_system_temp = {}
 
 #main functions
 
@@ -77,6 +78,7 @@ def firewall_check(domain):
 			return True
 	except:
 		pass
+
 
 def parse_app(app):
 	lines = app["code"].split("\n")
@@ -128,6 +130,38 @@ def parse_app(app):
 		except:
 			pass
 
+class snake_gh:
+	cuser = ""
+	def validate_user(username):
+		#if the username is blank
+		if username == "":
+			return False
+		# prevent path traversal 
+		if "/" in username or "\\" in username:
+			return False
+		# block usernames banned by GitHub
+		bannedusers = ["login"]
+		if username in bannedusers:
+			return False
+		return True
+	def get_repos_by_user(user=""):
+		if self.validate_user(user) == False:
+			return []
+		try:
+			list = requests.get("https://api.github.com/users/{}/repos".format(user))
+		except:
+			return []
+
+class v_fs:
+	def __init__(template={}):
+		self.fs = template
+	def write(filename,fpath,content):
+		self.fs[fpath][filename] = {"content":content}
+	def mkdir(path):
+		self.fs[path] = {}
+	def read(filename,fpath):
+		return self.fs[fpath][filename]["content"]
+
 def parsecmd(cmd,runelevated=False):
 	global hasloadedbefore
 	global configdata
@@ -149,7 +183,6 @@ def parsecmd(cmd,runelevated=False):
 		newcmd.pop(0)
 		parsecmd(" ".join(newcmd),runelevated=True)
 		return None
-	
 	if cmd == "getuser":
 		if runelevated == True:
 			print("root")
@@ -674,6 +707,7 @@ def parsecmd(cmd,runelevated=False):
 			parsecmd(configdata["alias"][cmd])
 			return None
 		except Exception as err:
+			#print(err)
 			print("Command not found: {}".format(cmd))
 
 
